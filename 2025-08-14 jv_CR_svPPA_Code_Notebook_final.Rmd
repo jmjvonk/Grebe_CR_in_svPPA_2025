@@ -1,0 +1,1327 @@
+---
+title: "jv_CR_svPPA_Code"
+authors: Lauren Grebe & Jet M.J. Vonk
+date: "Aug 14 2025 (last edits)"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Load necessary libraries
+```{r}
+library(car)
+library(psych)
+library(stats)
+library(lme4)      # For mixed-effects models
+library(lmerTest)  # To get p-values for lmer
+library(readxl)    # To read Excel files
+library(dplyr)     # For data manipulation
+library(gridExtra)
+library(ggplot2)
+library(ggpubr)
+library(ggeffects)
+library(broom)
+library(writexl)
+```
+
+#Load Data
+```{r}
+# Read in data from Master sheet
+svPPAdata <- read_excel("[insert path here]")
+
+# Check structure
+#str(svPPAdata)
+```
+
+#count, per participant, how many of the 5 cognitive tasks have non-missing (i.e., valid) data points
+```{r}
+# Count number of non-NA cognitive scores per participant
+svPPAdata$CogTasks_Completed <- rowSums(!is.na(svPPAdata[, c("DCorr", "ANCorr", "BNTTot", "TrCoTot", "MTTime")]))
+
+# View a summary
+table(svPPAdata$CogTasks_Completed)
+
+# Optional: see PIDNs and counts
+svPPAdata[, c("PIDN", "CogTasks_Completed")]
+```
+
+#Basic Neuroimaging-Cognition Check
+```{r}
+# Does atrophy relate to cognitive performance?
+
+# DCorr
+check_model1 <- lm(DCorr ~ AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV , data = svPPAdata)
+summary(check_model1)
+
+# ANCorr
+check_model2 <- lm(ANCorr ~ AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(check_model2)
+
+# BNTTot
+check_model3 <- lm(BNTTot ~ AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(check_model3)
+
+# TrCoTot
+check_model4 <- lm(TrCoTot ~ AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(check_model4)
+
+# MTTime
+check_model5 <- lm(MTTime ~ AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(check_model5)
+```
+
+#Main Effects of CR Proxies on Cognition
+#Note: not sure if we need this analysis; Maybe in supplementary materials?
+```{r}
+# Effect of CR proxies on cognitive performance (no neuroimaging yet)
+# ------------------
+# Education Models
+# ------------------
+
+# DCorr
+cr_model1_educ <- lm(DCorr ~ Educ_Rescore + Age + Gender2, data = svPPAdata)
+summary(cr_model1_educ)
+#if need to check for normal distribution of residuals:
+#par(mfrow = c(2, 2))
+#plot(cr_model1_educ)
+
+# ANCorr
+cr_model2_educ <- lm(ANCorr ~ Educ_Rescore + Age + Gender2, data = svPPAdata)
+summary(cr_model2_educ)
+
+# BNTTot
+cr_model3_educ <- lm(BNTTot ~ Educ_Rescore + Age + Gender2, data = svPPAdata)
+summary(cr_model3_educ)
+
+# TrCoTot
+cr_model4_educ <- lm(TrCoTot ~ Educ_Rescore + Age + Gender2, data = svPPAdata)
+summary(cr_model4_educ)
+
+# MTTime
+cr_model5_educ <- lm(MTTime ~ Educ_Rescore + Age + Gender2, data = svPPAdata)
+summary(cr_model5_educ)
+
+
+# ------------------
+# Occupation Models
+# ------------------
+
+# DCorr
+cr_model1_occ <- lm(DCorr ~ Occ_no_level1 + Age + Gender2, data = svPPAdata)
+summary(cr_model1_occ)
+
+# ANCorr
+cr_model2_occ <- lm(ANCorr ~ Occ_no_level1 + Age + Gender2, data = svPPAdata)
+summary(cr_model2_occ)
+
+# BNTTot
+cr_model3_occ <- lm(BNTTot ~ Occ_no_level1 + Age + Gender2, data = svPPAdata)
+summary(cr_model3_occ)
+
+# TrCoTot
+cr_model4_occ <- lm(TrCoTot ~ Occ_no_level1 + Age + Gender2, data = svPPAdata)
+summary(cr_model4_occ)
+
+# MTTime
+cr_model5_occ <- lm(MTTime ~ Occ_no_level1 + Age + Gender2, data = svPPAdata)
+summary(cr_model5_occ)
+```
+
+#Effect of CR Proxies on Neuroimaging
+#Note: not sure if we need this analysis; Maybe in supplementary materials?
+```{r}
+# CR proxies and neuroimaging (TIV and ScannerType included)
+cr_imaging_model1 <- lm(AbsoluteVolume_GM ~ Educ_Rescore + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(cr_imaging_model1)
+
+cr_imaging_model2 <- lm(AbsoluteVolume_GM ~ Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(cr_imaging_model2)
+```
+
+#Interaction: Does CR Moderate the Brain-Cognition Relationship?
+```{r}
+#rescale (center) for interaction
+svPPAdata$AbsoluteVolume_GM_c <- scale(svPPAdata$AbsoluteVolume_GM, center = TRUE, scale = FALSE)
+svPPAdata$Educ_Rescore_c <- scale(svPPAdata$Educ_Rescore, center = TRUE, scale = FALSE)
+
+# Get mean values used to center variables (needed for interaction plots)
+mean_volume <- attr(svPPAdata$AbsoluteVolume_GM_c, "scaled:center")
+mean_education <- attr(svPPAdata$Educ_Rescore_c, "scaled:center")
+
+svPPAdata$AbsoluteVolume_GM_c <- as.numeric(svPPAdata$AbsoluteVolume_GM_c)
+svPPAdata$Educ_Rescore_c <- as.numeric(svPPAdata$Educ_Rescore_c)
+
+
+# Interaction Model: AbsoluteVolume_GM * Education predicting cognition
+interaction_model1_educ <- lm(DCorr ~ AbsoluteVolume_GM_c * Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model1_educ)
+
+interaction_model2_educ <- lm(ANCorr ~ AbsoluteVolume_GM_c * Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model2_educ)
+
+interaction_model3_educ <- lm(BNTTot ~ AbsoluteVolume_GM_c * Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model3_educ)
+
+interaction_model4_educ <- lm(TrCoTot ~ AbsoluteVolume_GM_c * Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model4_educ)
+
+interaction_model5_educ <- lm(MTTime ~ AbsoluteVolume_GM_c * Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model5_educ)
+
+
+# Interaction Model: AbsoluteVolume_GM * Occupation predicting cognition
+#rescaled (center) and with more cognitive variables
+interaction_model1_occ <- lm(DCorr ~ AbsoluteVolume_GM_c * Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model1_occ)
+
+interaction_model2_occ <- lm(ANCorr ~ AbsoluteVolume_GM_c * Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model2_occ)
+
+interaction_model3_occ <- lm(BNTTot ~ AbsoluteVolume_GM_c * Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model3_occ)
+
+interaction_model4_occ <- lm(TrCoTot ~ AbsoluteVolume_GM_c * Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model4_occ)
+
+interaction_model5_occ <- lm(MTTime ~ AbsoluteVolume_GM_c * Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+summary(interaction_model5_occ)
+```
+
+#Put interaction results in table
+```{r}
+# List of models
+model_list <- list(
+  interaction_model1_educ,
+  interaction_model2_educ,
+  interaction_model3_educ,
+  interaction_model4_educ,
+  interaction_model5_educ,
+  interaction_model1_occ,
+  interaction_model2_occ,
+  interaction_model3_occ,
+  interaction_model4_occ,
+  interaction_model5_occ
+)
+
+# Descriptive model names
+model_names <- c(
+  "DCorr_Educ", "ANCorr_Educ", "BNTTot_Educ", "TrCoTot_Educ", "MTTime_Educ",
+  "DCorr_Occ", "ANCorr_Occ", "BNTTot_Occ", "TrCoTot_Occ", "MTTime_Occ"
+)
+
+# Patterns to match interaction terms
+interaction_terms <- c("AbsoluteVolume_GM_c:Educ_Rescore_c", 
+                       "AbsoluteVolume_GM_c:Occ_no_level12", 
+                       "AbsoluteVolume_GM_c:Occ_no_level13")
+
+# Initialize results container
+interaction_results <- data.frame()
+
+# Loop through models and extract interaction terms
+for (i in seq_along(model_list)) {
+  model <- model_list[[i]]
+  model_name <- model_names[i]
+  terms <- tidy(model)
+  interactions <- terms[grepl("AbsoluteVolume_GM_c:", terms$term), ]
+  if (nrow(interactions) > 0) {
+    interactions$model <- model_name
+    interaction_results <- rbind(interaction_results, interactions)
+  }
+}
+
+# Reorder and display
+interaction_results <- interaction_results[, c("model", "term", "estimate", "std.error", "statistic", "p.value")]
+print(interaction_results)
+
+write_xlsx(interaction_results, path = "R_interaction_results.xlsx")
+
+```
+
+
+
+#Model Comparison: Does Including CR Improve Model Fit? [we don't necessarily need to report this in the paper]
+```{r}
+###ANOVA comparisons for Education
+
+# Model 1: DCorr
+main_model1_educ <- lm(DCorr ~ AbsoluteVolume_GM_c + Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model1_educ, interaction_model1_educ)
+
+# Model 2: ANCorr
+main_model2_educ <- lm(ANCorr ~ AbsoluteVolume_GM_c + Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model2_educ, interaction_model2_educ)
+
+# Model 3: BNTTot
+main_model3_educ <- lm(BNTTot ~ AbsoluteVolume_GM_c + Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model3_educ, interaction_model3_educ)
+
+# Model 4: TrCoTot
+main_model4_educ <- lm(TrCoTot ~ AbsoluteVolume_GM_c + Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model4_educ, interaction_model4_educ)
+
+# Model 5: MTTime
+main_model5_educ <- lm(MTTime ~ AbsoluteVolume_GM_c + Educ_Rescore_c + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model5_educ, interaction_model5_educ)
+
+
+###ANOVA comparisons for Occupation
+# Model 1: DCorr
+main_model1_occ <- lm(DCorr ~ AbsoluteVolume_GM_c + Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model1_occ, interaction_model1_occ)
+
+# Model 2: ANCorr
+main_model2_occ <- lm(ANCorr ~ AbsoluteVolume_GM_c + Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model2_occ, interaction_model2_occ)
+
+# Model 3: BNTTot
+main_model3_occ <- lm(BNTTot ~ AbsoluteVolume_GM_c + Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model3_occ, interaction_model3_occ)
+
+# Model 4: TrCoTot
+main_model4_occ <- lm(TrCoTot ~ AbsoluteVolume_GM_c + Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model4_occ, interaction_model4_occ)
+
+# Model 5: MTTime
+main_model5_occ <- lm(MTTime ~ AbsoluteVolume_GM_c + Occ_no_level1 + Age + Gender2 + ScannerType + TIV, data = svPPAdata)
+anova(main_model5_occ, interaction_model5_occ)
+```
+
+#visualize plots
+```{r}
+# Define annotation helper function
+add_annotation <- function(PLOT, TEXT, POSITION = "top-left", SIZE = 4, NUM_BLANKS = 3, ITALICS = FALSE) {
+  pad <- paste(rep(" ", times = NUM_BLANKS), collapse = "")
+  if (POSITION == "bottom-left") {
+    label_ <- paste(pad, TEXT, "\n", sep = ""); x_ <- -Inf; y_ <- -Inf
+  } else if (POSITION == "bottom-right") {
+    label_ <- paste(TEXT, pad, "\n", sep = ""); x_ <- Inf; y_ <- -Inf
+  } else if (POSITION == "top-right") {
+    label_ <- paste("\n", TEXT, pad, sep = ""); x_ <- Inf; y_ <- Inf
+  } else if (POSITION == "top-left") {
+    label_ <- paste("\n", pad, TEXT, sep = ""); x_ <- -Inf; y_ <- Inf
+  } else {
+    label_ <- NA; print("--> position not one of the four corners")
+  }
+  PLOT + annotate("text", x = x_, y = y_, label = label_, vjust = "inward", hjust = "inward",
+                  size = SIZE, color = "black", family = "sans", fontface = ifelse(ITALICS, "italic", "plain"))
+}
+
+theme_set(theme_bw())
+
+# Phonemic Fluency (DCorr)
+p1 <- ggplot(data = svPPAdata, aes(x = Educ_Rescore, y = DCorr)) +
+  geom_point(color = "firebrick1", size = 2) +
+  stat_smooth(method = lm) +
+  ggtitle("Phonemic Fluency and Education in svPPA") +
+  xlab("Years of Education") +
+  ylab("Phonemic Fluency Score (DCorr)") +
+  scale_y_continuous(limits = c(0, 25))
+p1 <- add_annotation(PLOT = p1, TEXT = paste("n =", nrow(svPPAdata)), POSITION = "top-left", SIZE = 5, ITALICS = TRUE)
+print(p1)
+
+# Category Fluency (ANCorr)
+p2 <- ggplot(data = svPPAdata, aes(x = Educ_Rescore, y = ANCorr)) +
+  geom_point(color = "firebrick1", size = 2) +
+  stat_smooth(method = lm) +
+  ggtitle("Category Fluency and Education in svPPA") +
+  xlab("Years of Education") +
+  ylab("Category Fluency Score (ANCorr)") +
+  scale_y_continuous(limits = c(0, 25))
+p2 <- add_annotation(PLOT = p2, TEXT = paste("n =", nrow(svPPAdata)), POSITION = "top-left", SIZE = 5, ITALICS = TRUE)
+print(p2)
+
+# Naming (BNTTot)
+p3 <- ggplot(data = svPPAdata, aes(x = Educ_Rescore, y = BNTTot)) +
+  geom_point(color = "firebrick1", size = 2) +
+  stat_smooth(method = lm) +
+  ggtitle("Confrontation Naming (BNT) and Education in svPPA") +
+  xlab("Years of Education") +
+  ylab("Boston Naming Test (BNTTot)") +
+  scale_y_continuous(limits = c(0, 30))
+p3 <- add_annotation(PLOT = p3, TEXT = paste("n =", nrow(svPPAdata)), POSITION = "top-left", SIZE = 5, ITALICS = TRUE)
+print(p3)
+
+# CVLT Word List Learning (TrCoTot)
+p4 <- ggplot(data = svPPAdata, aes(x = Educ_Rescore, y = TrCoTot)) +
+  geom_point(color = "firebrick1", size = 2) +
+  stat_smooth(method = lm) +
+  ggtitle("CVLT Word List Learning and Education in svPPA") +
+  xlab("Years of Education") +
+  ylab("CVLT Learning Total (TrCoTot)") +
+  scale_y_continuous(limits = c(0, 20))
+p4 <- add_annotation(PLOT = p4, TEXT = paste("n =", nrow(svPPAdata)), POSITION = "top-left", SIZE = 5, ITALICS = TRUE)
+print(p4)
+
+# Modified Trails Time (MTTime)
+p5 <- ggplot(data = svPPAdata, aes(x = Educ_Rescore, y = MTTime)) +
+  geom_point(color = "firebrick1", size = 2) +
+  stat_smooth(method = lm) +
+  ggtitle("Modified Trails Time and Education in svPPA") +
+  xlab("Years of Education") +
+  ylab("Modified Trails Completion Time (MTTime)") +
+  scale_y_continuous(limits = c(0, max(svPPAdata$MTTime, na.rm = TRUE)))
+p5 <- add_annotation(PLOT = p5, TEXT = paste("n =", sum(!is.na(svPPAdata$MTTime))), POSITION = "top-left", SIZE = 5, ITALICS = TRUE)
+print(p5)
+```
+
+
+#Boxplot to visualize occupation
+```{r}
+# Ensure consistent theme
+theme_set(theme_bw())
+
+
+# ------------------ DCorr ------------------
+plot1 <- ggplot(subset(svPPAdata, !is.na(Occ_no_level1)), aes(x = Occ_no_level1, y = DCorr)) +
+  geom_boxplot(fill = "palevioletred", outlier.colour = "darkblue", outlier.shape = 8, outlier.size = 4, alpha = 0.5) +
+  ggtitle("Phonemic Fluency and Occupation in svPPA") +
+  xlab("Occupation Level") +
+  ylab("Phonemic Fluency (DCorr)") +
+  scale_x_discrete(labels = c("1" = "2", "2" = "3", "3" = "4"))
+print(plot1)
+
+# ------------------ ANCorr ------------------
+plot2 <- ggplot(subset(svPPAdata, !is.na(Occ_no_level1)), aes(x = Occ_no_level1, y = ANCorr)) +
+  geom_boxplot(fill = "palevioletred", outlier.colour = "darkblue", outlier.shape = 8, outlier.size = 4, alpha = 0.5) +
+  ggtitle("Category Fluency and Occupation in svPPA") +
+  xlab("Occupation Level") +
+  ylab("Category Fluency (ANCorr)") +
+  scale_x_discrete(labels = c("1" = "2", "2" = "3", "3" = "4"))
+print(plot2)
+
+# ------------------ BNTTot ------------------
+plot3 <- ggplot(subset(svPPAdata, !is.na(Occ_no_level1)), aes(x = Occ_no_level1, y = BNTTot)) +
+  geom_boxplot(fill = "palevioletred", outlier.colour = "darkblue", outlier.shape = 8, outlier.size = 4, alpha = 0.5) +
+  ggtitle("Confrontation Naming and Occupation in svPPA") +
+  xlab("Occupation Level") +
+  ylab("BNT Total Score") +
+  scale_x_discrete(labels = c("1" = "2", "2" = "3", "3" = "4"))
+print(plot3)
+
+# ------------------ TrCoTot ------------------
+plot4 <- ggplot(subset(svPPAdata, !is.na(Occ_no_level1)), aes(x = Occ_no_level1, y = TrCoTot)) +
+  geom_boxplot(fill = "palevioletred", outlier.colour = "darkblue", outlier.shape = 8, outlier.size = 4, alpha = 0.5) +
+  ggtitle("CVLT Word List Learning and Occupation in svPPA") +
+  xlab("Occupation Level") +
+  ylab("CVLT Total (TrCoTot)") +
+  scale_x_discrete(labels = c("1" = "2", "2" = "3", "3" = "4"))
+print(plot4)
+
+# ------------------ MTTime ------------------
+plot5 <- ggplot(subset(svPPAdata, !is.na(Occ_no_level1)), aes(x = Occ_no_level1, y = MTTime)) +
+  geom_boxplot(fill = "palevioletred", outlier.colour = "darkblue", outlier.shape = 8, outlier.size = 4, alpha = 0.5) +
+  ggtitle("Modified Trails Time and Occupation in svPPA") +
+  xlab("Occupation Level") +
+  ylab("Time to Completion (MTTime)") +
+  scale_x_discrete(labels = c("1" = "2", "2" = "3", "3" = "4"))
+print(plot5)
+```
+
+
+#Interaction plots
+
+#Interaction plots: EDUCATION (predicted values)
+```{r}
+# Step 1: Define quantiles (if not already done)
+svPPAdata$Educ_quantile <- cut(
+  svPPAdata$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Use outcome labels and titles
+outcome_labels <- c("DCorr", "ANCorr", "BNTTot", "TrCoTot", "MTTime")
+titles <- c("Phonemic Fluency", "Category Fluency", "Naming (BNT)", 
+            "CVLT Word List Learning", "Modified Trails Time")
+
+
+# Step 2: Group means and prediction grid for Q1–Q3
+group_means <- tapply(svPPAdata$Educ_Rescore, svPPAdata$Educ_quantile, mean, na.rm = TRUE)
+educ_mean <- mean(svPPAdata$Educ_Rescore, na.rm = TRUE)
+
+# Define range of centered brain volume
+vol_seq_c <- seq(min(svPPAdata$AbsoluteVolume_GM_c, na.rm = TRUE),
+                 max(svPPAdata$AbsoluteVolume_GM_c, na.rm = TRUE),
+                 length.out = 100)
+
+newdat <- expand.grid(
+  AbsoluteVolume_GM_c = vol_seq_c,
+  Educ_group = c("Low", "Mid", "High"),
+  Age = mean(svPPAdata$Age, na.rm = TRUE),
+  Gender2 = factor("1", levels = levels(svPPAdata$Gender2)),
+  ScannerType = factor(levels(svPPAdata$ScannerType)[1], levels = levels(svPPAdata$ScannerType)),
+  TIV = mean(svPPAdata$TIV, na.rm = TRUE)
+)
+
+# Assign centered education values by quantile group
+newdat$Educ_Rescore_c <- group_means[newdat$Educ_group] - educ_mean
+newdat$AbsoluteVolume_GM <- newdat$AbsoluteVolume_GM_c + mean(svPPAdata$AbsoluteVolume_GM, na.rm = TRUE)
+newdat$EducationGroup <- factor(newdat$Educ_group,
+                                levels = c("Low", "Mid", "High"),
+                                labels = c("Low Education (High school+)", "Mid Education (College BA)", "High Education (Master+)"))
+
+
+# Loop over models to create plots
+for (i in seq_along(model_list)) {
+  # Predict and filter
+newdat$pred <- predict(model_list[[i]], newdata = newdat)
+plotdat <- subset(newdat, pred >= 0)
+
+# Get observed outcome and volume limits
+outcome_var <- outcome_labels[i]
+valid_data <- svPPAdata[!is.na(svPPAdata[[outcome_var]]), ]
+y_min <- min(valid_data[[outcome_var]], na.rm = TRUE)
+y_max <- max(valid_data[[outcome_var]], na.rm = TRUE)
+
+# Trim predicted lines to y range
+plotdat <- subset(plotdat, pred >= y_min & pred <= y_max)
+
+# Plot
+p <- ggplot(plotdat, aes(x = AbsoluteVolume_GM, y = pred, color = EducationGroup)) +
+  geom_line(size = 1.3) +
+  geom_point(data = svPPAdata,
+             aes(x = AbsoluteVolume_GM, y = .data[[outcome_var]], color = Educ_quantile),
+             inherit.aes = FALSE, alpha = 0.5) +
+  scale_color_manual(
+    values = c(
+      "Low" = "blue", "Mid" = "gray60", "High" = "red",
+      "Low Education (High school+)" = "blue", "Mid Education (College BA)" = "gray60", "High Education (Master+)" = "red"
+    ),
+    name = "Education Group"
+  ) + 
+  scale_x_continuous(limits = c(450, 710), expand = c(0, 0)) +
+  coord_cartesian(ylim = c(y_min, y_max)) +
+  labs(
+    title = paste("Predicted", titles[i], "by Brain Volume and Education Quantile"),
+    x = "Total Gray Matter Volume (cm³)",
+    y = paste("Predicted", outcome_var)
+  ) +
+  theme_bw()
+
+print(p)
+}
+
+```
+
+```{r}
+# Count the number of people in each education group
+table(svPPAdata$Educ_quantile)
+```
+
+
+#Interaction plots: EDUCATION (observed values -- USE THIS PLOT)
+```{r}
+# Step 1: Define quantiles (if not already done)
+svPPAdata$Educ_quantile <- cut(
+  svPPAdata$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Use outcome labels and titles
+outcome_labels <- c("DCorr", "ANCorr", "BNTTot", "TrCoTot", "MTTime")
+titles <- c("Phonemic Fluency", "Category Fluency", "Naming (BNT)", 
+            "CVLT Word List Learning", "Modified Trails Time")
+
+# Filter the dataset to include only Low and High education groups
+svPPAdata_filtered <- svPPAdata[svPPAdata$Educ_quantile %in% c("Low", "High"), ]
+
+# Plot observed values (Low and High Education only)
+for (i in seq_along(outcome_labels)) {
+  
+  # Get the outcome variable and title
+  outcome_var <- outcome_labels[i]
+  title_var <- titles[i]
+  
+  # Extract valid data
+  valid_data <- svPPAdata_filtered[!is.na(svPPAdata_filtered[[outcome_var]]), ]
+  y_min <- min(valid_data[[outcome_var]], na.rm = TRUE)
+  y_max <- max(valid_data[[outcome_var]], na.rm = TRUE)
+  
+  # Plot observed values for Low and High Education groups
+  p <- ggplot(valid_data, aes(x = AbsoluteVolume_GM, y = .data[[outcome_var]], color = Educ_quantile)) +
+    geom_point(alpha = 0.5) +
+    stat_smooth(method = "lm", aes(group = Educ_quantile), se = FALSE, size = 1.2) +
+    scale_color_manual(
+      values = c("Low" = "blue", "High" = "red"),
+      labels = c("Low Education (High school+)", "High Education (Master+)"),
+      name = "Education Group"
+    ) +
+    labs(
+      title = paste("Observed", title_var, "by Brain Volume and Education (Low & High)"),
+      x = "Total Gray Matter Volume (cm³)",
+      y = paste("Observed", outcome_var)
+    ) +
+    coord_cartesian(ylim = c(y_min, y_max)) +
+    theme_bw() +
+    theme(legend.position = "right")
+  
+  print(p)
+}
+```
+
+
+#Interaction plots: OCCUPATION (predicted values)
+```{r}
+# Define models for OCCUPATION
+model_list_occ <- list(
+  interaction_model1_occ,
+  interaction_model2_occ,
+  interaction_model3_occ,
+  interaction_model4_occ,
+  interaction_model5_occ
+)
+
+
+# Levels of occupation
+occupation_levels <- levels(svPPAdata$Occ_no_level1)
+
+# Create prediction grid
+vol_seq_c <- seq(min(svPPAdata$AbsoluteVolume_GM_c, na.rm = TRUE),
+                 max(svPPAdata$AbsoluteVolume_GM_c, na.rm = TRUE),
+                 length.out = 100)
+
+newdat_occ <- expand.grid(
+  AbsoluteVolume_GM_c = vol_seq_c,
+  Occ_no_level1 = factor(occupation_levels, levels = occupation_levels),
+  Age = mean(svPPAdata$Age, na.rm = TRUE),
+  Gender2 = factor("1", levels = levels(svPPAdata$Gender2)),
+  ScannerType = factor(levels(svPPAdata$ScannerType)[1], levels = levels(svPPAdata$ScannerType)),
+  TIV = mean(svPPAdata$TIV, na.rm = TRUE)
+)
+
+# Add raw volume for plotting
+mean_volume <- mean(svPPAdata$AbsoluteVolume_GM, na.rm = TRUE)
+newdat_occ$AbsoluteVolume_GM <- newdat_occ$AbsoluteVolume_GM_c + mean_volume
+
+# Loop over models
+for (i in seq_along(model_list_occ)) {
+  
+  outcome_var <- outcome_labels[i]
+  
+  # Predict
+  newdat_occ$pred <- predict(model_list_occ[[i]], newdata = newdat_occ)
+  plotdat <- subset(newdat_occ, pred >= 0)
+  
+  # Trim predicted lines to observed outcome range
+  valid_data <- svPPAdata[!is.na(svPPAdata[[outcome_var]]), ]
+  y_min <- min(valid_data[[outcome_var]], na.rm = TRUE)
+  y_max <- max(valid_data[[outcome_var]], na.rm = TRUE)
+  x_min <- min(valid_data$AbsoluteVolume_GM, na.rm = TRUE)
+  x_max <- max(valid_data$AbsoluteVolume_GM, na.rm = TRUE)
+  plotdat <- subset(plotdat, pred >= y_min & pred <= y_max)
+  
+  # Recode factor levels for display
+  plotdat$Occ_display <- recode_factor(
+    plotdat$Occ_no_level1,
+    "1" = "2 (lower)",
+    "2" = "3 (mid)",
+    "3" = "4 (higher)"
+  )
+  
+  svPPAdata$Occ_display <- recode_factor(
+    svPPAdata$Occ_no_level1,
+    "1" = "2 (lower)",
+    "2" = "3 (mid)",
+    "3" = "4 (higher)"
+  )
+
+  # Create a temporary version of svPPAdata without NA occupation
+  svPPA_plot <- svPPAdata[!is.na(svPPAdata$Occ_no_level1), ]
+
+  # Plot
+  p <- ggplot(plotdat, aes(x = AbsoluteVolume_GM, y = pred, color = Occ_display)) +
+    geom_line(size = 1.3) +
+    geom_point(data = svPPA_plot,
+               aes(x = AbsoluteVolume_GM, y = .data[[outcome_var]], color = Occ_display),
+               inherit.aes = FALSE, alpha = 0.5) +
+    scale_color_manual(values = c("2 (lower)" = "blue", "3 (mid)" = "gray60", "4 (higher)" = "red")) +
+    scale_x_continuous(limits = c(450, 710), expand = c(0, 0)) +
+    coord_cartesian(ylim = c(y_min, y_max)) +
+    labs(
+      title = paste("Predicted", titles[i], "by Brain Volume and Occupation Level"),
+      x = "Total Gray Matter Volume (cm³)",
+      y = paste("Predicted", outcome_var),
+      color = "Occupation Level"
+    ) +
+    theme_bw()
+  
+  print(p)
+}
+```
+
+
+
+#Interaction plots: OCCUPATION (observed values -- USE THIS PLOT)
+```{r}
+# Filter the dataset to include valid occupation groups
+svPPA_plot <- svPPAdata[!is.na(svPPAdata$Occ_no_level1), ]
+
+# Recode factor levels for display
+svPPA_plot$Occ_display <- recode_factor(
+  svPPA_plot$Occ_no_level1,
+  "1" = "2 (lower)",
+  "2" = "3 (mid)",
+  "3" = "4 (higher)"
+)
+
+# Plot observed values for each outcome
+for (i in seq_along(outcome_labels)) {
+  
+  # Get the outcome variable and title
+  outcome_var <- outcome_labels[i]
+  title_var <- titles[i]
+  
+  # Extract valid data
+  valid_data <- svPPA_plot[!is.na(svPPA_plot[[outcome_var]]), ]
+  y_min <- min(valid_data[[outcome_var]], na.rm = TRUE)
+  y_max <- max(valid_data[[outcome_var]], na.rm = TRUE)
+  
+  # Plot observed values for all three occupation groups
+  p <- ggplot(valid_data, aes(x = AbsoluteVolume_GM, y = .data[[outcome_var]], color = Occ_display)) +
+    geom_point(alpha = 0.5) +
+    stat_smooth(method = "lm", aes(group = Occ_display), se = FALSE, size = 1.2) +
+    scale_color_manual(
+      values = c("2 (lower)" = "blue", "3 (mid)" = "gray60", "4 (higher)" = "red"),
+      labels = c("2 (lower)", "3 (mid)", "4 (higher)"),
+      name = "Occupation Level"
+    ) +
+    labs(
+      title = paste("Observed", title_var, "by Brain Volume and Occupation Level"),
+      x = "Total Gray Matter Volume (cm³)",
+      y = paste("Observed", outcome_var)
+    ) +
+    coord_cartesian(ylim = c(y_min, y_max)) +
+    theme_bw() +
+    theme(legend.position = "right")
+  
+  print(p)
+}
+```
+
+
+
+
+
+
+
+
+
+#####LONGITUDINAL MODELS (for tasks showing cross-sectional interactions)
+
+#Calculate change scores and center variables, see how many participants per model
+```{r}
+# Check how many have a follow-up visit
+num_followup <- sum(!is.na(svPPAdata$days_btwn_scans))
+cat("Number of participants with follow-up visit:", num_followup, "\n")
+
+# Subset data to those with a follow-up visit
+long_data <- subset(svPPAdata, !is.na(days_btwn_scans))
+
+# Calculate change scores for cognition and neuroimaging
+long_data$Change_ANCorr <- long_data$ANCorr_2 - long_data$ANCorr
+long_data$Change_BNTTot <- long_data$BNTTot_2 - long_data$BNTTot
+long_data$Change_AbsoluteVolume_GM <- long_data$AbsoluteVolume_GM_2 - long_data$AbsoluteVolume_GM
+
+
+# Center variables for interaction
+long_data$AbsoluteVolume_GM_2_c <- scale(long_data$AbsoluteVolume_GM_2, center = TRUE, scale = FALSE)
+long_data$Educ_Rescore_c <- scale(long_data$Educ_Rescore, center = TRUE, scale = FALSE)
+long_data$Occ_no_level1 <- factor(long_data$Occ_no_level1)  # Ensure occupation is a factor
+long_data$Change_AbsoluteVolume_GM_c <- as.numeric(scale(long_data$Change_AbsoluteVolume_GM, center = TRUE, scale = FALSE))
+
+# change type for interaction plot
+long_data$AbsoluteVolume_GM_2_c <- as.numeric(long_data$AbsoluteVolume_GM_2_c)
+long_data$Educ_Rescore_c <- as.numeric(long_data$Educ_Rescore_c)
+
+# Delete cases who don't have Change_ANCorr or Change_BNTTot (if both are missing)
+long_data <- subset(long_data, !is.na(Change_ANCorr) | !is.na(Change_BNTTot))
+
+# Count how many people are available for each model
+num_ancorr <- sum(!is.na(long_data$Change_ANCorr))
+num_bnttot <- sum(!is.na(long_data$Change_BNTTot))
+
+cat("Number of participants for Animal Fluency (ANCorr) models:", num_ancorr, "\n")
+cat("Number of participants for BNT (BNTTot) models:", num_bnttot, "\n")
+```
+
+#higher education/occupation not related to change in neuroimaing in svPPA (i.e., no indication of brain maintenance)
+```{r}
+#Models: Change in Brain Volume ~ Education/Occupation + Covariates
+cr_brain_decline_models <- list(
+  # Education models
+  lm(Change_AbsoluteVolume_GM ~ Educ_Rescore_c + Age + Gender2 + ScannerType + TIV + days_btwn_scans, data = long_data),
+  
+  # Occupation models
+  lm(Change_AbsoluteVolume_GM ~ Occ_no_level1 + Age + Gender2 + ScannerType + TIV + days_btwn_scans, data = long_data)
+)
+
+#Print model summaries
+for (i in seq_along(cr_brain_decline_models)) {
+  cat("\nCR Predicting Brain Volume Decline Model", i, "Summary:\n")
+  print(summary(cr_brain_decline_models[[i]]))
+}
+```
+
+#higher education also not related to follow-up brain volume (i.e., no indication of brain maintenance)
+```{r}
+# Ensure that Education is treated as a continuous variable
+long_data$Educ_Rescore_c <- scale(long_data$Educ_Rescore, center = TRUE, scale = FALSE)
+
+# Model to test relationship between follow-up brain volume and education (continuous)
+brain_volume_education_cont_model <- lm(AbsoluteVolume_GM_2 ~ Educ_Rescore_c + AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV, data = long_data)
+
+# Print model summary
+summary(brain_volume_education_cont_model)
+```
+
+
+
+#Higher education/occupation related to less change in BNT (not for animal fluency) in svPPA. 
+```{r}
+#Models: Change in Cognition ~ Education/Occupation + Covariates
+cr_cognitive_decline_models <- list(
+  # Education models
+  lm(Change_ANCorr ~ Educ_Rescore_c + Age + Gender2 + days_btwn_scans, data = long_data),
+  lm(Change_BNTTot ~ Educ_Rescore_c + Age + Gender2 + days_btwn_scans, data = long_data),
+
+  # Occupation models
+  lm(Change_ANCorr ~ Occ_no_level1 + Age + Gender2 + days_btwn_scans, data = long_data),
+  lm(Change_BNTTot ~ Occ_no_level1 + Age + Gender2 + days_btwn_scans, data = long_data)
+)
+
+#Print model summaries
+for (i in seq_along(cr_cognitive_decline_models)) {
+  cat("\nCR Predicting Cognitive Decline Model", i, "Summary:\n")
+  print(summary(cr_cognitive_decline_models[[i]]))
+}
+```
+
+
+
+#Model for testing reserve longitudinally (focused on buffering the impact of low brain volume): The interaction term tests whether the impact of follow-up brain volume on cognitive change differs by CR level (adjusted for baseline by including change in rate GM as covariate--cannot include baseline itself because colinear).
+```{r}
+# Animal Fluency (ANCorr) ~ Follow-Up Brain Volume * Education
+interaction_model1_educ_long <- lm(Change_ANCorr ~ AbsoluteVolume_GM_2_c * Educ_Rescore_c + Change_AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV + days_btwn_scans, data = long_data)
+summary(interaction_model1_educ_long)
+
+# Naming (BNT) ~ Follow-Up Brain Volume * Education
+interaction_model2_educ_long <- lm(Change_BNTTot ~ AbsoluteVolume_GM_2_c * Educ_Rescore_c + Change_AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV + days_btwn_scans, data = long_data)
+summary(interaction_model2_educ_long)
+
+# Animal Fluency (ANCorr) ~ Follow-Up Brain Volume * Occupation
+interaction_model1_occ_long <- lm(Change_ANCorr ~ AbsoluteVolume_GM_2_c * Occ_no_level1 + Change_AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV + days_btwn_scans, data = long_data)
+summary(interaction_model1_occ_long)
+
+# Naming (BNT) ~ Follow-Up Brain Volume * Occupation
+interaction_model2_occ_long <- lm(Change_BNTTot ~ AbsoluteVolume_GM_2_c * Occ_no_level1 + Change_AbsoluteVolume_GM + Age + Gender2 + ScannerType + TIV + days_btwn_scans, data = long_data)
+summary(interaction_model2_occ_long)
+
+```
+
+#Create dataframe
+```{r}
+# Define education quantiles in long_data
+long_data$Educ_quantile_long <- cut(
+  long_data$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Print the structure to verify
+table(long_data$Educ_quantile_long)
+
+# Define range of centered brain volume (no overwrite)
+vol_seq_long_c <- seq(min(long_data$AbsoluteVolume_GM_2_c, na.rm = TRUE),
+                      max(long_data$AbsoluteVolume_GM_2_c, na.rm = TRUE),
+                      length.out = 100)
+
+# Group means for education (no overwrite)
+long_group_means <- tapply(long_data$Educ_Rescore, long_data$Educ_quantile_long, mean, na.rm = TRUE)
+long_educ_mean <- mean(long_data$Educ_Rescore, na.rm = TRUE)
+
+# Create the prediction data frame (no overwrite)
+newdat_long <- expand.grid(
+  AbsoluteVolume_GM_2_c = vol_seq_long_c,
+  Educ_group_long = c("Low", "Mid", "High"),
+  Occ_no_level1 = factor(c("1", "2", "3"), levels = c("1", "2", "3")),
+  Change_AbsoluteVolume_GM = mean(long_data$Change_AbsoluteVolume_GM, na.rm = TRUE),
+  Age = mean(long_data$Age, na.rm = TRUE),
+  Gender2 = factor("1", levels = levels(long_data$Gender2)),
+  ScannerType = factor(levels(long_data$ScannerType)[1], levels = levels(long_data$ScannerType)),
+  TIV = mean(long_data$TIV, na.rm = TRUE),
+  days_btwn_scans = mean(long_data$days_btwn_scans, na.rm = TRUE)
+)
+
+# Assign centered education values by quantile group (no overwrite)
+newdat_long$Educ_Rescore_c <- long_group_means[newdat_long$Educ_group_long] - long_educ_mean
+newdat_long$AbsoluteVolume_GM_2 <- newdat_long$AbsoluteVolume_GM_2_c + mean(long_data$AbsoluteVolume_GM_2, na.rm = TRUE)
+newdat_long$EducationGroupLong <- factor(newdat_long$Educ_group_long,
+                                         levels = c("Low", "Mid", "High"),
+                                         labels = c("Low Education (High school+)", 
+                                                    "Mid Education (College BA)", 
+                                                    "High Education (Master+)"))
+
+# Print the structure to check
+str(newdat_long)
+```
+
+
+```{r}
+# Count the number of participants in each education group
+table(long_data$Educ_quantile_long)
+```
+
+#Visualization longitudinal interaction EDUCATION (observed change -- USE THIS PLOT, more accurate visualization)
+#no mid group because only 3 people in mid group
+```{r}
+# Education Models - Observed Change Plot (Low and High Only)
+# Outcome labels and titles for Education models
+educ_outcome_labels <- c("Change_ANCorr", "Change_BNTTot")
+educ_titles <- c("Animal Fluency (ANCorr)", "Naming (BNT)")
+
+# Plotting Observed Change with Trend Lines for Low and High Education Groups
+for (i in seq_along(educ_outcome_labels)) {
+  
+  # Extract outcome variable and data for plotting
+  outcome_var_long <- educ_outcome_labels[i]
+  valid_long_data <- long_data[!is.na(long_data[[outcome_var_long]]), ]
+  
+  # Filter data to include only Low and High education groups
+  valid_long_data <- valid_long_data[valid_long_data$Educ_quantile_long %in% c("Low", "High"), ]
+  
+  # Get observed outcome and volume limits
+  y_min_long <- min(valid_long_data[[outcome_var_long]], na.rm = TRUE)
+  y_max_long <- max(valid_long_data[[outcome_var_long]], na.rm = TRUE)
+  x_min_long <- min(valid_long_data$AbsoluteVolume_GM_2, na.rm = TRUE)
+  x_max_long <- max(valid_long_data$AbsoluteVolume_GM_2, na.rm = TRUE)
+  
+  # Plot for Education Interaction (Observed Change with Average Trend Line)
+  p_long_educ <- ggplot(valid_long_data, aes(x = AbsoluteVolume_GM_2, y = .data[[outcome_var_long]], color = Educ_quantile_long)) +
+    geom_point(size = 2, alpha = 0.7) +
+    geom_smooth(aes(group = Educ_quantile_long), method = "lm", se = FALSE, size = 1.5) + # Average trend line per group
+    scale_color_manual(
+      values = c(
+        "Low" = "blue", 
+        "High" = "red",
+        "Low Education (High school+)" = "blue", 
+        "High Education (Master+)" = "red"
+      ),
+      name = "Education Group"
+    ) +
+    labs(
+      title = paste("Observed", educ_titles[i], "by Follow-Up Brain Volume and Education Quantile"),
+      x = "Follow-Up Gray Matter Volume (cm³)",
+      y = paste("Observed", outcome_var_long)
+    ) +
+    scale_x_continuous(limits = c(x_min_long, x_max_long), expand = c(0.05, 0.05)) +
+    coord_cartesian(ylim = c(y_min_long, y_max_long)) +
+    theme_bw()
+
+  print(p_long_educ)
+}
+```
+
+
+#Visualization longitudinal interaction OCCUPATION (predicted change)
+```{r}
+# Occupation Models
+occupation_models <- list(
+  interaction_model1_occ_long,
+  interaction_model2_occ_long
+)
+
+# Outcome labels and titles for Occupation models
+occ_outcome_labels <- c("Change_ANCorr", "Change_BNTTot")
+occ_titles <- c("Animal Fluency (ANCorr)", "Naming (BNT)")
+
+# Plotting Occupation Interaction Models
+for (i in seq_along(occupation_models)) {
+  
+  # Predict values
+  newdat_long$pred_long <- predict(occupation_models[[i]], newdata = newdat_long)
+  
+  # Get observed outcome limits
+  outcome_var_long <- occ_outcome_labels[i]
+  valid_long_data <- long_data[!is.na(long_data[[outcome_var_long]]), ]
+  y_min_long <- min(valid_long_data[[outcome_var_long]], na.rm = TRUE)
+  y_max_long <- max(valid_long_data[[outcome_var_long]], na.rm = TRUE)
+
+  # Plot for Occupation Interaction
+p_long_occ <- ggplot(newdat_long, aes(x = AbsoluteVolume_GM_2, y = pred_long, color = Occ_no_level1)) +
+  geom_line(size = 1.3) +
+  geom_point(data = long_data,
+             aes(x = AbsoluteVolume_GM_2, y = .data[[occ_outcome_labels[2]]], color = Occ_no_level1),
+             inherit.aes = FALSE, alpha = 0.5) +
+  scale_color_manual(
+    values = c("1" = "blue", "2" = "gray60", "3" = "red"),
+    labels = c("1" = "Lower", "2" = "Mid", "3" = "Higher"),
+    name = "Occupation Level"
+  ) +
+  labs(
+    title = paste("Predicted", occ_titles[2], "by Follow-Up Brain Volume and Occupation Level"),
+    x = "Follow-Up Gray Matter Volume (cm³)",
+    y = paste("Predicted", occ_outcome_labels[2])
+  ) +
+  theme_bw()
+
+print(p_long_occ)
+}
+
+```
+
+
+```{r}
+# Count the number of people in the Low and High occupation groups
+low_high_count <- table(long_data$Occ_no_level1[long_data$Occ_no_level1 %in% c("1", "2", "3")])
+
+# Print the counts
+cat("Number of people in Low, Mid and High occupation groups:\n")
+print(low_high_count)
+```
+
+
+#Visualization longitudinal interaction OCCUPATION (observed change -- USE THIS PLOT, more accurate visualization)
+```{r}
+# Occupation Models - Observed Change Plot (Low and High Only)
+# Outcome labels and titles for Occupation models
+occ_outcome_labels <- c("Change_ANCorr", "Change_BNTTot")
+occ_titles <- c("Animal Fluency (ANCorr)", "Naming (BNT)")
+
+# Plotting Observed Change with Trend Lines for Low and High Occupation Groups
+for (i in seq_along(occ_outcome_labels)) {
+  
+  # Extract outcome variable and data for plotting
+  outcome_var_long <- occ_outcome_labels[i]
+  valid_long_data <- long_data[!is.na(long_data[[outcome_var_long]]), ]
+  
+  # Filter data to include only Low and High occupation groups
+  valid_long_data <- valid_long_data[valid_long_data$Occ_no_level1 %in% c("1", "2", "3"), ]
+  
+  # Get observed outcome and volume limits
+  y_min_long <- min(valid_long_data[[outcome_var_long]], na.rm = TRUE)
+  y_max_long <- max(valid_long_data[[outcome_var_long]], na.rm = TRUE)
+  x_min_long <- min(valid_long_data$AbsoluteVolume_GM_2, na.rm = TRUE)
+  x_max_long <- max(valid_long_data$AbsoluteVolume_GM_2, na.rm = TRUE)
+  
+  # Plot for Occupation Interaction (Observed Change with Average Trend Line)
+  p_long_occ <- ggplot(valid_long_data, aes(x = AbsoluteVolume_GM_2, y = .data[[outcome_var_long]], color = Occ_no_level1)) +
+    geom_point(size = 2, alpha = 0.7) +
+    geom_smooth(aes(group = Occ_no_level1), method = "lm", se = FALSE, size = 1.5) + # Average trend line per group
+    scale_color_manual(
+      values = c(
+        "1" = "blue", 
+        "2" = "grey60",
+        "3" = "red"
+      ),
+      labels = c("Low Occupation (Level 1)", "Mid Occupation (Level 2)", "High Occupation (Level 3)"),
+      name = "Occupation Group"
+    ) +
+    labs(
+      title = paste("Observed", occ_titles[i], "by Follow-Up Brain Volume and Occupation Level"),
+      x = "Follow-Up Gray Matter Volume (cm³)",
+      y = paste("Observed", outcome_var_long)
+    ) +
+    scale_x_continuous(limits = c(x_min_long, x_max_long), expand = c(0.05, 0.05)) +
+    coord_cartesian(ylim = c(y_min_long, y_max_long)) +
+    theme_bw()
+
+  print(p_long_occ)
+}
+```
+
+
+
+
+
+
+
+```{r}
+# Prepare data for plotting
+long_data$Educ_quantile_long <- cut(
+  long_data$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Plot baseline vs. follow-up cognition against baseline vs. follow-up GM
+ggplot(long_data, aes(x = AbsoluteVolume_GM, y = ANCorr, color = Educ_quantile_long, group = PIDN)) +
+  # Baseline points
+  geom_point(aes(x = AbsoluteVolume_GM, y = ANCorr), shape = 16, size = 3, alpha = 0.6) +
+  
+  # Follow-up points
+  geom_point(aes(x = AbsoluteVolume_GM_2, y = ANCorr_2), shape = 17, size = 3, alpha = 0.8) +
+  
+  # Connecting lines between baseline and follow-up for each individual
+  geom_segment(aes(x = AbsoluteVolume_GM, y = ANCorr, xend = AbsoluteVolume_GM_2, yend = ANCorr_2), 
+               linetype = "dashed", color = "black", alpha = 0.5) +
+  
+  # Color scale for education groups
+  scale_color_manual(
+    values = c("Low" = "blue", "Mid" = "gray60", "High" = "red"),
+    name = "Education Group"
+  ) +
+  
+  # Facet by education group
+  facet_wrap(~ Educ_quantile_long) +
+  
+  labs(
+    title = "Baseline vs. Follow-Up ANCorr and GM Volume by Education Group",
+    x = "Gray Matter Volume (cm³)",
+    y = "Animal Fluency (ANCorr)",
+    caption = "Circles: Baseline | Triangles: Follow-Up | Dashed lines: Individual change"
+  ) +
+  theme_bw() +
+  theme(legend.position = "right")
+
+```
+
+#Wilcoxon Rank-Sum Test for Change in Animal Fluency (ANCorr) between High and Low Education Groups
+```{r}
+# Step 1: Create change scores for Animal Fluency
+long_data$Change_ANCorr <- long_data$ANCorr_2 - long_data$ANCorr
+
+# Step 2: Define education groups with the specified breaks
+long_data$Educ_group <- cut(
+  long_data$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Step 3: Subset data to include only Low and High education groups (exclude Mid)
+long_data_high_low <- subset(long_data, Educ_group %in% c("Low", "High"))
+
+# Step 5: Check the number of participants in each group with this restriction
+table(long_data_high_low$Educ_group)
+
+
+# Step 4: Apply the brain volume restriction (baseline brain volume <= 575)
+long_data_high_low <- subset(long_data_high_low, AbsoluteVolume_GM <= 575)
+
+# Step 5: Check the number of participants in each group with this restriction
+table(long_data_high_low$Educ_group)
+
+# Step 6a: Perform the independent two-sample t-test
+t_test_result <- t.test(
+  Change_ANCorr ~ Educ_group,
+  data = long_data_high_low,
+  var.equal = FALSE # Welch's t-test for unequal variances
+)
+
+# Print the t-test result
+print(t_test_result)
+
+# Step 6b: Perform the Wilcoxon rank-sum test (Mann-Whitney U test)
+wilcox_test_result <- wilcox.test(
+  Change_ANCorr ~ Educ_group,
+  data = long_data_high_low,
+  exact = FALSE # Uses normal approximation due to small sample size in one group
+)
+
+# Print the Wilcoxon test result
+print(wilcox_test_result)
+
+
+# Step 7: Linear regression to test the difference between High and Low education groups
+lm_result <- lm(
+  Change_ANCorr ~ Educ_group + days_btwn_scans,
+  data = long_data_high_low
+)
+
+# Print the summary of the linear regression model
+summary(lm_result)
+
+# Step 8: Check the number of participants in each group after adjustment
+cat("Number of participants in each group after adjustment:\n")
+print(table(long_data_high_low$Educ_group))
+
+```
+
+#Similar for BNT:  Plot: Baseline vs. Follow-Up BNT and GM Volume by Education Group
+```{r}
+# Prepare data for plotting BNT
+long_data$Educ_quantile_long <- cut(
+  long_data$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Plot baseline vs. follow-up BNT against baseline vs. follow-up GM
+ggplot(long_data, aes(x = AbsoluteVolume_GM, y = BNTTot, color = Educ_quantile_long, group = PIDN)) +
+  # Baseline points
+  geom_point(aes(x = AbsoluteVolume_GM, y = BNTTot), shape = 16, size = 3, alpha = 0.6) +
+  
+  # Follow-up points
+  geom_point(aes(x = AbsoluteVolume_GM_2, y = BNTTot_2), shape = 17, size = 3, alpha = 0.8) +
+  
+  # Connecting lines between baseline and follow-up for each individual
+  geom_segment(aes(x = AbsoluteVolume_GM, y = BNTTot, xend = AbsoluteVolume_GM_2, yend = BNTTot_2), 
+               linetype = "dashed", color = "black", alpha = 0.5) +
+  
+  # Color scale for education groups
+  scale_color_manual(
+    values = c("Low" = "blue", "Mid" = "gray60", "High" = "red"),
+    name = "Education Group"
+  ) +
+  
+  # Facet by education group
+  facet_wrap(~ Educ_quantile_long) +
+  
+  labs(
+    title = "Baseline vs. Follow-Up BNT and GM Volume by Education Group",
+    x = "Gray Matter Volume (cm³)",
+    y = "Naming (BNT)",
+    caption = "Circles: Baseline | Triangles: Follow-Up | Dashed lines: Individual change"
+  ) +
+  theme_bw() +
+  theme(legend.position = "right")
+
+```
+
+#Similar for BNT:Statistical Tests for Change in BNT between High and Low Education Groups for people with baseline GM lower than 575:
+```{r}
+# Linear regression to test the difference between High and Low education groups for BNT
+lm_result_bnt <- lm(
+  Change_BNTTot ~ Educ_group + days_btwn_scans,
+  data = long_data_high_low
+)
+
+# Print the summary of the linear regression model
+summary(lm_result_bnt)
+
+# Check the number of participants in each group after adjustment
+cat("Number of participants in each group after adjustment:\n")
+print(table(long_data_high_low$Educ_group))
+```
+
+
+#Wilcoxon Rank-Sum Test for Change in Brain Volume between Low and High Education Groups
+```{r}
+# Step 1: Calculate change scores for brain volume
+long_data$Change_AbsoluteVolume_GM <- long_data$AbsoluteVolume_GM_2 - long_data$AbsoluteVolume_GM
+
+# Step 2: Define education groups with the specified breaks
+long_data$Educ_group <- cut(
+  long_data$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Step 3: Subset data to include only Low and High education groups (exclude Mid)
+long_data_high_low <- subset(long_data, Educ_group %in% c("Low", "High"))
+
+# Step 4: Check the number of participants in each group
+cat("Number of participants in each group:\n")
+print(table(long_data_high_low$Educ_group))
+
+# Step 5: Perform the Wilcoxon rank-sum test (Mann-Whitney U test)
+wilcox_test_result <- wilcox.test(
+  Change_AbsoluteVolume_GM ~ Educ_group,
+  data = long_data_high_low,
+  exact = FALSE # Uses normal approximation due to potential small sample size
+)
+
+# Print the Wilcoxon test result
+print(wilcox_test_result)
+
+# Step 6: Print median change per group for additional context
+median_change_low <- median(long_data_high_low$Change_AbsoluteVolume_GM[long_data_high_low$Educ_group == "Low"], na.rm = TRUE)
+median_change_high <- median(long_data_high_low$Change_AbsoluteVolume_GM[long_data_high_low$Educ_group == "High"], na.rm = TRUE)
+
+cat("Median change in brain volume for Low Education Group:", median_change_low, "\n")
+cat("Median change in brain volume for High Education Group:", median_change_high, "\n")
+
+```
+
+#Wilcoxon Rank-Sum Test for Change in Animal Fluency in High Education Group (compare the difference in Animal Fluency (ANCorr) between baseline and follow-up within the high education group, based on whether baseline GM volume is less than or greater than 575)
+```{r}
+# Step 1: Calculate change scores for Animal Fluency
+long_data$Change_ANCorr <- long_data$ANCorr_2 - long_data$ANCorr
+
+# Step 2: Define education groups with the specified breaks
+long_data$Educ_group <- cut(
+  long_data$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Step 3: Subset data to include only High education group
+high_educ_data <- subset(long_data, Educ_group == "High")
+
+# Step 4: Create a new group variable based on follow-up GM volume threshold (575)
+high_educ_data$GM_Group <- ifelse(high_educ_data$AbsoluteVolume_GM < 575, "Low GM", "High GM")
+
+# Step 5: Check the number of participants in each GM group
+cat("Number of participants in each GM group within High Education:\n")
+print(table(high_educ_data$GM_Group))
+
+# Step 6: Perform the Wilcoxon rank-sum test (Mann-Whitney U test)
+wilcox_test_result <- wilcox.test(
+  Change_ANCorr ~ GM_Group,
+  data = high_educ_data,
+  exact = FALSE # Uses normal approximation due to potential small sample size
+)
+
+# Print the Wilcoxon test result
+print(wilcox_test_result)
+
+# Step 7: Print median change per GM group for additional context
+median_change_low_gm <- median(high_educ_data$Change_ANCorr[high_educ_data$GM_Group == "Low GM"], na.rm = TRUE)
+median_change_high_gm <- median(high_educ_data$Change_ANCorr[high_educ_data$GM_Group == "High GM"], na.rm = TRUE)
+
+cat("Median change in Animal Fluency for Low GM Group (< 575):", median_change_low_gm, "\n")
+cat("Median change in Animal Fluency for High GM Group (>= 575):", median_change_high_gm, "\n")
+
+```
+
+#Similar for BNT:
+```{r}
+# Step 1: Calculate change scores for BNT
+long_data$Change_BNTTot <- long_data$BNTTot_2 - long_data$BNTTot
+
+# Step 2: Define education groups with the specified breaks
+long_data$Educ_group <- cut(
+  long_data$Educ_Rescore,
+  breaks = c(-Inf, 16, 17, Inf),
+  labels = c("Low", "Mid", "High"),
+  right = TRUE
+)
+
+# Step 3: Subset data to include only High education group
+high_educ_data_bnt <- subset(long_data, Educ_group == "High")
+
+# Step 4: Create a new group variable based on follow-up GM volume threshold (575)
+high_educ_data_bnt$GM_Group <- ifelse(high_educ_data_bnt$AbsoluteVolume_GM < 575, "Low GM", "High GM")
+
+# Step 5: Check the number of participants in each GM group
+cat("Number of participants in each GM group within High Education (BNT):\n")
+print(table(high_educ_data_bnt$GM_Group))
+
+# Step 6: Perform the Wilcoxon rank-sum test (Mann-Whitney U test) for BNT
+wilcox_test_result_bnt <- wilcox.test(
+  Change_BNTTot ~ GM_Group,
+  data = high_educ_data_bnt,
+  exact = FALSE # Uses normal approximation due to potential small sample size
+)
+
+# Print the Wilcoxon test result for BNT
+print(wilcox_test_result_bnt)
+
+# Step 7: Print median change per GM group for additional context
+median_change_low_gm_bnt <- median(high_educ_data_bnt$Change_BNTTot[high_educ_data_bnt$GM_Group == "Low GM"], na.rm = TRUE)
+median_change_high_gm_bnt <- median(high_educ_data_bnt$Change_BNTTot[high_educ_data_bnt$GM_Group == "High GM"], na.rm = TRUE)
+
+cat("Median change in BNT for Low GM Group (< 575):", median_change_low_gm_bnt, "\n")
+cat("Median change in BNT for High GM Group (>= 575):", median_change_high_gm_bnt, "\n")
+```
+
+#These patterns confirm that earlier in the disease process, people with higher reserve can compensate for brain volume loss, maintaining better cognitive performance compared to lower reserve individuals. Then later in the disease process, once compensation capacity is exhausted, they show a sharper decline when brain volume decreases because the reserve has been depleted.
+#Of note: these last few analyses are only done for education because we don't have enough folks in high and low occupation to do these kind of analyses.
